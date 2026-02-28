@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Pulmonary Vasculature — Interactive 3D Viewer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=JetBrains+Mono:wght@300;400&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --vessel-red: #e8453c;
+  --vessel-dark: #8b1a14;
+  --accent: #ff6b5e;
+  --text: #c8c4bf;
+  --text-dim: #5a5652;
+  --panel-bg: rgba(12, 12, 18, 0.85);
+  --border: rgba(232, 69, 60, 0.15);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#canvas-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+canvas { display: block; touch-action: none; }
+
+/* ── Header overlay ── */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 20px 24px 16px;
+  background: linear-gradient(to bottom, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.6) 60%, transparent 100%);
+  pointer-events: none;
+}
+
+.header h1 {
+  font-size: clamp(1rem, 3.5vw, 1.6rem);
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e0dcd7;
+  margin-bottom: 4px;
+}
+
+.header .subtitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(0.5rem, 1.5vw, 0.68rem);
+  font-weight: 300;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.header .accent-line {
+  width: 50px;
+  height: 1.5px;
+  background: linear-gradient(90deg, var(--vessel-red), transparent);
+  margin-top: 12px;
+}
+
+/* ── Stats panel ── */
+.stats-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 10;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 18px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  min-width: 260px;
+  pointer-events: none;
+}
+
+.stats-panel .stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.stats-panel .stat-row:last-child { border-bottom: none; }
+
+.stat-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stat-value {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.stat-value.highlight { color: var(--accent); }
+.stat-value.small { font-size: 0.8rem; }
+
+/* ── Controls ── */
+.controls-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.ctrl-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 10px 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: all 0.3s ease;
+  pointer-events: all;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ctrl-btn:hover, .ctrl-btn:active {
+  border-color: var(--vessel-red);
+  color: var(--text);
+}
+
+.ctrl-btn.active {
+  background: rgba(232, 69, 60, 0.15);
+  border-color: var(--vessel-red);
+  color: var(--accent);
+}
+
+/* ── Color scheme selector ── */
+.scheme-row {
+  display: flex;
+  gap: 8px;
+}
+
+.scheme-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scheme-dot:hover, .scheme-dot.active {
+  border-color: #fff;
+  transform: scale(1.2);
+}
+
+/* ── Loader ── */
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.8s ease;
+}
+
+.loader.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loader-text {
+  font-size: 0.75rem;
+  font-weight: 300;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 24px;
+  text-align: center;
+  padding: 0 20px;
+}
+
+.loader-bar {
+  width: 120px;
+  height: 1.5px;
+  background: rgba(255,255,255,0.08);
+  margin-top: 12px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.loader-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--vessel-red);
+  transition: width 0.3s ease;
+}
+
+/* ── Journal badge ── */
+.journal-badge {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 10;
+  text-align: right;
+  pointer-events: none;
+}
+
+.journal-badge .journal {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.journal-badge .fig-label {
+  font-size: 0.9rem;
+  font-weight: 300;
+  font-style: italic;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+/* ── Error overlay ── */
+.error-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.error-overlay h2 {
+  font-size: 1.4rem;
+  font-weight: 300;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.error-overlay p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  line-height: 1.8;
+  max-width: 500px;
+}
+
+.error-overlay code {
+  color: var(--accent);
+  background: rgba(232,69,60,0.1);
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+/* ── Touch hint ── */
+.touch-hint {
+  position: fixed;
+  bottom: 50%;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  z-index: 50;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  text-align: center;
+  padding: 12px 20px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.touch-hint.show {
+  opacity: 1;
+  animation: fadeOutHint 3s ease 2s forwards;
+}
+
+@keyframes fadeOutHint {
+  to { opacity: 0; }
+}
+
+/* ── Mobile adjustments ── */
+@media (max-width: 640px) {
+  .stats-panel { display: none; }
+  .journal-badge { display: none; }
+  .header { padding: 14px 16px 12px; }
+  .controls-panel { bottom: 14px; right: 14px; }
+}
+</style>
+</head>
+<body>
+
+<div class="loader" id="loader">
+  <div class="loader-text">Loading pulmonary vasculature model</div>
+  <div class="loader-bar"><div class="loader-bar-fill" id="loader-fill"></div></div>
+</div>
+
+<div class="header">
+  <h1>Pulmonary Vasculature</h1>
+  <div class="subtitle">3D Vessel Reconstruction &nbsp;·&nbsp; Interactive Viewer &nbsp;·&nbsp; SITEE 2026</div>
+  <div class="accent-line"></div>
+</div>
+
+<div class="journal-badge">
+  <div class="journal">Interactive 3D Viewer</div>
+  <div class="fig-label">Fig. 1 — Pulmonary vascular tree</div>
+</div>
+
+<div class="stats-panel">
+  <div class="stat-row">
+    <span class="stat-label">Vertices</span>
+    <span class="stat-value highlight" id="stat-verts">—</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-label">Triangles</span>
+    <span class="stat-value" id="stat-faces">—</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-label">Meshes</span>
+    <span class="stat-value" id="stat-meshes">—</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-label">Format</span>
+    <span class="stat-value">GLB</span>
+  </div>
+  <div class="stat-row">
+    <span class="stat-label">Algorithm</span>
+    <span class="stat-value small">Watershed &amp; Frangi</span>
+  </div>
+</div>
+
+<div class="controls-panel">
+  <div class="scheme-row">
+    <div class="scheme-dot" data-scheme="red" style="background:#380000" title="Arterial Red"></div>
+    <div class="scheme-dot" data-scheme="blue" style="background:#000a2a" title="Venous Blue"></div>
+    <div class="scheme-dot" data-scheme="gold" style="background:#2a1800" title="Gold"></div>
+    <div class="scheme-dot active" data-scheme="white" style="background:#2a2220" title="Anatomical"></div>
+  </div>
+  <button class="ctrl-btn" id="btn-rotate">Auto-Rotate: On</button>
+  <button class="ctrl-btn" id="btn-wireframe">Wireframe</button>
+  <button class="ctrl-btn" id="btn-reset">Reset View</button>
+</div>
+
+<div class="touch-hint" id="touch-hint">
+  Drag to rotate &nbsp;·&nbsp; Pinch to zoom
+</div>
+
+<div id="canvas-container"></div>
+
+<!-- Three.js + official GLTFLoader from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════
+// VESSEL VIEWER — GLB Model Loader
+// ═══════════════════════════════════════════════
+
+// ╔═══════════════════════════════════════════════════════════╗
+// ║  CONFIGURATION — Change the path to your .glb file here  ║
+// ╚═══════════════════════════════════════════════════════════╝
+const MODEL_PATH = 'model.glb';  // <-- Put your .glb file name here
+
+
+const COLOR_SCHEMES = {
+  red:   { base: 0x380000, sss: 0xff0000, emissive: 0x220000 },
+  blue:  { base: 0x000a2a, sss: 0x2060ff, emissive: 0x000820 },
+  gold:  { base: 0x2a1800, sss: 0xffa020, emissive: 0x1a0e00 },
+  white: { base: 0x2a2220, sss: 0xffeedd, emissive: 0x151413 },
+};
+
+let scene, camera, renderer, vesselGroup;
+let vesselMeshes = [];
+let autoRotate = true;
+let wireframeMode = false;
+let currentScheme = 'white';
+let mouseX = 0, mouseY = 0;
+let targetRotX = 0, targetRotY = 0;
+let cameraDistance = 3.0;
+let cameraTheta = Math.PI / 4;  // horizontal angle
+let cameraPhi = Math.PI / 6;    // vertical angle
+
+function init() {
+  const container = document.getElementById('canvas-container');
+
+  // Scene
+  scene = new THREE.Scene();
+
+  // Camera
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.001, 200);
+  updateCameraPosition();
+
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x0a0a0f);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.8;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  container.appendChild(renderer.domElement);
+
+  // Group for vessel
+  vesselGroup = new THREE.Group();
+  scene.add(vesselGroup);
+
+  // Lights
+  setupLights();
+
+  // Load GLB model
+  loadModel();
+
+  // Controls
+  setupInteraction();
+
+  // Resize
+  window.addEventListener('resize', onResize);
+
+  // Animate
+  animate();
+}
+
+function updateCameraPosition() {
+  camera.position.set(
+    cameraDistance * Math.sin(cameraTheta) * Math.cos(cameraPhi),
+    cameraDistance * Math.sin(cameraPhi),
+    cameraDistance * Math.cos(cameraTheta) * Math.cos(cameraPhi)
+  );
+  camera.lookAt(0, 0, 0);
+}
+
+function setupLights() {
+  // Key light — warm, top-right
+  const key = new THREE.DirectionalLight(0xfff0e0, 1.4);
+  key.position.set(3, 4, 3);
+  scene.add(key);
+
+  // Fill — slightly warm from left
+  const fill = new THREE.DirectionalLight(0xd0c0b0, 0.5);
+  fill.position.set(-4, 2, 1);
+  scene.add(fill);
+
+  // Backlight — warm, edges glow
+  const back = new THREE.DirectionalLight(0xcc7060, 0.5);
+  back.position.set(-1, 0, -5);
+  scene.add(back);
+
+  // Top light — even illumination
+  const top = new THREE.DirectionalLight(0xeee8e0, 0.5);
+  top.position.set(0, 6, 0);
+  scene.add(top);
+
+  // Gentle specular point light — single subtle glint
+  const glint = new THREE.PointLight(0xffeedd, 0.8, 12, 1.5);
+  glint.position.set(2, 3, 4);
+  scene.add(glint);
+
+  // Bottom fill
+  const bottom = new THREE.DirectionalLight(0x805040, 0.3);
+  bottom.position.set(0, -4, 2);
+  scene.add(bottom);
+
+  // Ambient — warm, lifts shadows
+  const ambient = new THREE.AmbientLight(0x201008, 0.6);
+  scene.add(ambient);
+
+  // Hemisphere
+  const hemi = new THREE.HemisphereLight(0x201510, 0x0a0508, 0.3);
+  scene.add(hemi);
+}
+
+function loadModel() {
+  const loaderEl = document.getElementById('loader-fill');
+  const loaderText = document.querySelector('.loader-text');
+  loaderEl.style.width = '10%';
+
+  const loader = new THREE.GLTFLoader();
+
+  loader.load(
+    MODEL_PATH,
+    // onLoad
+    function(gltf) {
+      loaderEl.style.width = '80%';
+      loaderText.textContent = 'Building materials';
+
+      const scheme = COLOR_SCHEMES[currentScheme];
+
+      // SSS simulation via MeshPhysicalMaterial
+      // transmission + thickness + attenuationColor = fake subsurface scattering
+      const material = new THREE.MeshPhysicalMaterial({
+        color: scheme.base,                    // dark red surface (#380000)
+        emissive: scheme.emissive,
+        emissiveIntensity: 0.2,
+
+        // Wet/glossy tissue look
+        roughness: 0.25,
+        metalness: 0.0,
+        ior: 1.4,                              // organic tissue IOR
+
+        // SSS simulation — light passes through thin parts and glows red
+        transmission: 0.6,                     // how much light passes through
+        thickness: 1.5,                        // virtual thickness for attenuation
+        attenuationColor: new THREE.Color(scheme.sss),  // bright red SSS color
+        attenuationDistance: 0.3,              // how quickly light is absorbed
+
+        // Surface finish
+        clearcoat: 0.3,                        // wet sheen on top
+        clearcoatRoughness: 0.15,
+        specularIntensity: 0.5,
+
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+      });
+
+      let totalVerts = 0;
+      let totalFaces = 0;
+      let meshCount = 0;
+
+      // Traverse the loaded scene and apply our material
+      gltf.scene.traverse(function(child) {
+        if (child.isMesh) {
+          child.material = material;
+          vesselMeshes.push(child);
+          meshCount++;
+
+          if (child.geometry) {
+            const pos = child.geometry.attributes.position;
+            if (pos) totalVerts += pos.count;
+            const idx = child.geometry.index;
+            if (idx) totalFaces += idx.count / 3;
+            else if (pos) totalFaces += pos.count / 3;
+          }
+        }
+      });
+
+      vesselGroup.add(gltf.scene);
+
+      // Auto-center and scale the model
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      // Center the model at origin
+      gltf.scene.position.sub(center);
+
+      // Stand the patient upright:
+      // After X rotation patient lies on right side, so rotate Z +90° to stand up
+      gltf.scene.rotation.order = 'ZXY';
+      gltf.scene.rotation.x = -Math.PI / 2;
+      gltf.scene.rotation.z = Math.PI / 2;
+
+      // Scale to fit nicely in view (target ~2 units)
+      if (maxDim > 0) {
+        const scale = 2.0 / maxDim;
+        gltf.scene.scale.setScalar(scale);
+      }
+
+      // Re-center after rotation
+      const box2 = new THREE.Box3().setFromObject(vesselGroup);
+      const center2 = box2.getCenter(new THREE.Vector3());
+      vesselGroup.position.sub(center2);
+
+      // Adjust camera distance based on model
+      cameraDistance = 3.5;
+      updateCameraPosition();
+
+      // Update stats
+      document.getElementById('stat-verts').textContent = totalVerts.toLocaleString();
+      document.getElementById('stat-faces').textContent = totalFaces.toLocaleString();
+      document.getElementById('stat-meshes').textContent = meshCount.toLocaleString();
+
+      loaderEl.style.width = '100%';
+      setTimeout(function() {
+        document.getElementById('loader').classList.add('hidden');
+        // Show touch hint on mobile
+        if ('ontouchstart' in window) {
+          var hint = document.getElementById('touch-hint');
+          hint.classList.add('show');
+        }
+      }, 600);
+    },
+    // onProgress
+    function(xhr) {
+      if (xhr.lengthComputable) {
+        var pct = Math.round((xhr.loaded / xhr.total) * 70) + 10;
+        loaderEl.style.width = pct + '%';
+      }
+    },
+    // onError
+    function(error) {
+      console.error('Error loading model:', error);
+      document.getElementById('loader').innerHTML = `
+        <div class="error-overlay" style="position:relative;inset:auto;">
+          <h2>Model Not Found</h2>
+          <p>
+            Could not load <code>${MODEL_PATH}</code><br><br>
+            Place your <code>.glb</code> file in the same folder as this HTML file
+            and name it <code>model.glb</code><br><br>
+            Or edit the <code>MODEL_PATH</code> variable in the script to match your filename.
+          </p>
+        </div>
+      `;
+    }
+  );
+}
+
+function applyScheme(name) {
+  currentScheme = name;
+  const scheme = COLOR_SCHEMES[name];
+  vesselMeshes.forEach(function(mesh) {
+    mesh.material.color.setHex(scheme.base);
+    mesh.material.emissive.setHex(scheme.emissive);
+    if (mesh.material.attenuationColor) {
+      mesh.material.attenuationColor.setHex(scheme.sss);
+    }
+  });
+
+  document.querySelectorAll('.scheme-dot').forEach(function(d) {
+    d.classList.toggle('active', d.dataset.scheme === name);
+  });
+}
+
+function setupInteraction() {
+  // ── Button controls ──
+  document.getElementById('btn-rotate').addEventListener('click', function() {
+    autoRotate = !autoRotate;
+    this.textContent = 'Auto-Rotate: ' + (autoRotate ? 'On' : 'Off');
+    this.classList.toggle('active', autoRotate);
+  });
+
+  document.getElementById('btn-wireframe').addEventListener('click', function() {
+    wireframeMode = !wireframeMode;
+    vesselMeshes.forEach(function(m) { m.material.wireframe = wireframeMode; });
+    this.classList.toggle('active', wireframeMode);
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', function() {
+    cameraDistance = 3.5;
+    cameraTheta = Math.PI / 4;
+    cameraPhi = Math.PI / 6;
+    targetRotX = 0;
+    targetRotY = 0;
+    vesselGroup.rotation.set(0, 0, 0);
+    updateCameraPosition();
+  });
+
+  document.querySelectorAll('.scheme-dot').forEach(function(dot) {
+    dot.addEventListener('click', function() { applyScheme(dot.dataset.scheme); });
+  });
+
+  // ── Mouse interaction ──
+  var isDragging = false;
+  var prevX = 0, prevY = 0;
+
+  renderer.domElement.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    prevX = e.clientX;
+    prevY = e.clientY;
+  });
+
+  window.addEventListener('mouseup', function() { isDragging = false; });
+
+  window.addEventListener('mousemove', function(e) {
+    if (isDragging) {
+      var dx = e.clientX - prevX;
+      var dy = e.clientY - prevY;
+      targetRotY += dx * 0.005;
+      targetRotX += dy * 0.005;
+      targetRotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotX));
+      prevX = e.clientX;
+      prevY = e.clientY;
+    }
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  renderer.domElement.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    cameraDistance *= 1 + e.deltaY * 0.001;
+    cameraDistance = Math.max(0.5, Math.min(15, cameraDistance));
+    updateCameraPosition();
+  }, { passive: false });
+
+  // ── Touch interaction (mobile) ──
+  var touchStartDist = 0;
+  var touchStartRot = { x: 0, y: 0 };
+  var isTouching = false;
+  var lastTouchX = 0, lastTouchY = 0;
+
+  renderer.domElement.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    isTouching = true;
+
+    if (e.touches.length === 1) {
+      lastTouchX = e.touches[0].clientX;
+      lastTouchY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      touchStartDist = Math.sqrt(dx * dx + dy * dy);
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+
+    if (e.touches.length === 1 && isTouching) {
+      // Single finger: rotate
+      var dx = e.touches[0].clientX - lastTouchX;
+      var dy = e.touches[0].clientY - lastTouchY;
+      targetRotY += dx * 0.005;
+      targetRotX += dy * 0.005;
+      targetRotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotX));
+      lastTouchX = e.touches[0].clientX;
+      lastTouchY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      // Pinch: zoom
+      var dx = e.touches[0].clientX - e.touches[1].clientX;
+      var dy = e.touches[0].clientY - e.touches[1].clientY;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (touchStartDist > 0) {
+        var scale = touchStartDist / dist;
+        cameraDistance *= scale;
+        cameraDistance = Math.max(0.5, Math.min(15, cameraDistance));
+        updateCameraPosition();
+      }
+      touchStartDist = dist;
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchend', function(e) {
+    if (e.touches.length === 0) isTouching = false;
+    if (e.touches.length < 2) touchStartDist = 0;
+  });
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (autoRotate) {
+    targetRotY += 0.003;
+  }
+
+  // Smooth rotation
+  vesselGroup.rotation.x += (targetRotX - vesselGroup.rotation.x) * 0.08;
+  vesselGroup.rotation.y += (targetRotY - vesselGroup.rotation.y) * 0.08;
+
+  // Subtle camera parallax from mouse (desktop only)
+  if (!('ontouchstart' in window)) {
+    var targetX = cameraDistance * Math.sin(cameraTheta) * Math.cos(cameraPhi) + mouseX * 0.15;
+    var targetY = cameraDistance * Math.sin(cameraPhi) - mouseY * 0.1;
+    camera.position.x += (targetX - camera.position.x) * 0.02;
+    camera.position.y += (targetY - camera.position.y) * 0.02;
+  }
+
+  camera.lookAt(0, 0, 0);
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>
