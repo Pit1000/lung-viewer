@@ -166,22 +166,44 @@ canvas { display: block; touch-action: none; }
 /* ── Color scheme selector ── */
 .scheme-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .scheme-dot {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.1);
   cursor: pointer;
   transition: all 0.3s ease;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+  box-shadow:
+    inset 0 -3px 6px rgba(0,0,0,0.4),
+    inset 0 3px 6px rgba(255,255,255,0.15),
+    0 2px 8px rgba(0,0,0,0.5);
+}
+
+.scheme-dot::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  width: 8px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255,255,255,0.5), transparent);
+  pointer-events: none;
 }
 
 .scheme-dot:hover, .scheme-dot.active {
-  border-color: #fff;
-  transform: scale(1.2);
+  border-color: rgba(255,255,255,0.6);
+  transform: scale(1.25);
+  box-shadow:
+    inset 0 -3px 6px rgba(0,0,0,0.4),
+    inset 0 3px 6px rgba(255,255,255,0.15),
+    0 0 12px var(--glow-color, rgba(255,255,255,0.3)),
+    0 2px 8px rgba(0,0,0,0.5);
 }
 
 /* ── Loader ── */
@@ -376,10 +398,10 @@ canvas { display: block; touch-action: none; }
 
 <div class="controls-panel">
   <div class="scheme-row">
-    <div class="scheme-dot" data-scheme="red" style="background:#380000" title="Arterial Red"></div>
-    <div class="scheme-dot" data-scheme="blue" style="background:#000a2a" title="Venous Blue"></div>
-    <div class="scheme-dot" data-scheme="gold" style="background:#2a1800" title="Gold"></div>
-    <div class="scheme-dot active" data-scheme="white" style="background:#2a2220" title="Anatomical"></div>
+    <div class="scheme-dot" data-scheme="red" style="background:radial-gradient(circle at 35% 30%, #ff4040, #6b0a0a, #280000); --glow-color: rgba(255,50,50,0.5)" title="Arterial Red"></div>
+    <div class="scheme-dot" data-scheme="blue" style="background:radial-gradient(circle at 35% 30%, #4080ff, #0a2060, #000820); --glow-color: rgba(50,100,255,0.5)" title="Venous Blue"></div>
+    <div class="scheme-dot" data-scheme="gold" style="background:radial-gradient(circle at 35% 30%, #ffc050, #8b5010, #2a1800); --glow-color: rgba(255,180,50,0.5)" title="Gold"></div>
+    <div class="scheme-dot active" data-scheme="white" style="background:radial-gradient(circle at 35% 30%, #fff0e0, #a09080, #2a2220); --glow-color: rgba(255,240,220,0.4)" title="Anatomical"></div>
   </div>
   <button class="ctrl-btn" id="btn-rotate">Auto-Rotate: On</button>
   <button class="ctrl-btn" id="btn-wireframe">Wireframe</button>
